@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { User, Phone, Plus, Trash2, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,77 +7,91 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { addContact, deleteContact, getContacts, type Contact } from '@/lib/api';
 
-interface Contact {
-  id: string;
+interface ContactForm {
   name: string;
   phone: string;
   relation: string;
 }
 
-const sampleContacts: Contact[] = [
-  { id: '1', name: 'Priya Sharma', phone: '+91 98765 43210', relation: 'Sister' },
-  { id: '2', name: 'Deepak Patel', phone: '+91 87654 32109', relation: 'Father' },
-  { id: '3', name: 'Anjali Mehta', phone: '+91 76543 21098', relation: 'Friend' },
-];
-
 const ContactsPage: React.FC = () => {
-  const [contacts, setContacts] = useState<Contact[]>(sampleContacts);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [currentContact, setCurrentContact] = useState<Contact>({
-    id: '', name: '', phone: '', relation: ''
-  });
+  const [currentContact, setCurrentContact] = useState<ContactForm>({ name: '', phone: '', relation: '' });
   const [isEditing, setIsEditing] = useState(false);
 
+  useEffect(() => {
+    const fetchContacts = async () => {
+      try {
+        const contactsFromApi = await getContacts();
+        setContacts(contactsFromApi);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to load contacts';
+        toast.error(message);
+      }
+    };
+
+    void fetchContacts();
+  }, []);
+
   const openAddDialog = () => {
-    setCurrentContact({ id: '', name: '', phone: '', relation: '' });
+    setCurrentContact({ name: '', phone: '', relation: '' });
     setIsEditing(false);
     setIsDialogOpen(true);
   };
 
   const openEditDialog = (contact: Contact) => {
-    setCurrentContact(contact);
+    setCurrentContact({ name: contact.name, phone: contact.phone, relation: contact.relation });
     setIsEditing(true);
     setIsDialogOpen(true);
   };
 
-  const handleSaveContact = () => {
+  const handleSaveContact = async () => {
     if (!currentContact.name || !currentContact.phone) {
       toast.error('Name and phone number are required');
       return;
     }
 
     if (isEditing) {
-      const updatedContacts = contacts.map(contact => 
-        contact.id === currentContact.id ? currentContact : contact
-      );
-      setContacts(updatedContacts);
-      toast.success(`${currentContact.name} updated successfully`);
+      toast.info('Update contact API is not available yet. Please delete and add again.');
+      return;
     } else {
-      const newContact = {
-        ...currentContact,
-        id: Date.now().toString(),
-      };
-      setContacts([...contacts, newContact]);
-      toast.success(`${newContact.name} added as emergency contact`);
+      try {
+        const newContact = await addContact(currentContact);
+        setContacts((prevContacts) => [newContact, ...prevContacts]);
+        toast.success(`${newContact.name} added as emergency contact`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to add contact';
+        toast.error(message);
+        return;
+      }
     }
-    
+
     setIsDialogOpen(false);
+    setCurrentContact({ name: '', phone: '', relation: '' });
   };
 
-  const handleDeleteContact = (id: string) => {
-    const contactToDelete = contacts.find(contact => contact.id === id);
-    const updatedContacts = contacts.filter(contact => contact.id !== id);
-    setContacts(updatedContacts);
-    toast.success(`${contactToDelete?.name} removed from emergency contacts`);
+  const handleDeleteContact = async (id: number) => {
+    const contactToDelete = contacts.find((contact) => contact.id === id);
+
+    try {
+      await deleteContact(id);
+      const updatedContacts = contacts.filter((contact) => contact.id !== id);
+      setContacts(updatedContacts);
+      toast.success(`${contactToDelete?.name ?? 'Contact'} removed from emergency contacts`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete contact';
+      toast.error(message);
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setCurrentContact({
-      ...currentContact,
-      [name]: value
-    });
+    setCurrentContact((prevContact) => ({
+      ...prevContact,
+      [name]: value,
+    }));
   };
 
   return (
